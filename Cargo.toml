@@ -1,0 +1,10 @@
+[package]
+name = "pidctrl"
+version = "0.1.0"
+edition = "2024"
+authors = ["Rafael Amadeo Garcia Perez <linkedin.com/in/ragp>"]
+description = "Library for PID controllers in Rust"
+repository = ""
+license = "MIT or Apache-2.0"
+
+[dependencies]
