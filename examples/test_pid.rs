@@ -8,7 +8,8 @@
 use pidctrl::pid::Pid;
 
 fn main() {
-    let tmp_controller: Pid = Pid::new(1.0, 0.1, 0.0, 0.0);
+    let mut tmp_controller: Pid = Pid::new(1.0, 0.1, 0.0, 0.0);
+    tmp_controller.set_pid_config(100.0f32, 0.0f32, 0.015f32);
 
     tmp_controller.print_pid();
 }

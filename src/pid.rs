@@ -5,7 +5,7 @@
 /************************************************************************************************************************
  * INCLUDES
  ************************************************************************************************************************/
- use crate::utils;
+use crate::utils;
 
 const PID_CONTROLLER_NAME: &str = "PID Controller Crate";
 const PID_CONTROLLER_RELEASE: &str = "0.1.0";
@@ -40,6 +40,9 @@ pub struct Pid {
     //Controller status
 }
 
+/* 
+ * Public implementations
+ */
 impl Pid {
     pub fn new(kp: f32, ki: f32, kd: f32, ksat: f32) -> Self {
         Self { 
@@ -65,13 +68,16 @@ impl Pid {
         }
     }
 
-    pub fn set_pid_limits(&mut self, up_lim: f32, lw_lim: f32) {
-        self.up_lim = up_lim;
-        self.lw_lim = lw_lim;
-    }  
+    pub fn set_pid_constants(&mut self, kp: f32, ki: f32, kd: f32, ksat: f32) {
+        self.kp = kp;
+        self.ki = ki;
+        self.kd = kd;
+        self.ksat = ksat;
+    }
 
-    pub fn set_pid_sample_time(&mut self, t_s: f32) {
-        self.t_s = t_s;
+    pub fn set_pid_config(&mut self, up_lim: f32, lw_lim: f32, t_s: f32) {
+        self.set_pid_limits(up_lim, lw_lim);
+        self.set_pid_sample_time(t_s);
     }
 
     pub fn pid_step_wo_aw(&mut self, setp: f32, meas: f32) -> f32 {
@@ -120,18 +126,55 @@ impl Pid {
         todo!();
     }
 
+    pub fn print_pid_performance(&self) {
+        println!("Controller output: {} (P={}, I={}, D={})", 
+        self.output, 
+        self.prop_term_output,
+        self.int_term_output,
+        self.der_term_output
+        );
 
+        println!("Controller saturated output: {} <= {} <= {}", 
+        self.lw_lim, 
+        self.output_sat,
+        self.up_lim);
 
-    pub fn print_pid_performance() {
-        todo!();
+        println!("Controller error: {}. Accumulated error: {}", 
+        self.error,
+        self.error_summ);
+    }
+
+    pub fn print_pid_config(&self) {
+        println!("Kp={}, Ki={}, Kd={}, Ksat={}",
+        self.kp,
+        self.ki,
+        self.kd,
+        self.ksat);
+
+        println!("Lower limit: {}, upper limit: {}. Sample time: {}s",
+        self.lw_lim,
+        self.up_lim,
+        self.t_s);
     }
 
     pub fn print_pid(&self) -> () {
-        println!("{:#?}", self);
+        self.print_pid_config();
+        self.print_pid_performance();
     }
+}
 
+/*
+ * Private implementations
+ */
+impl Pid {
+    fn set_pid_limits(&mut self, up_lim: f32, lw_lim: f32) {
+        self.up_lim = up_lim;
+        self.lw_lim = lw_lim;
+    }  
 
-
+    fn set_pid_sample_time(&mut self, t_s: f32) {
+        self.t_s = t_s;
+    }
 }
 
 pub fn print_module_info() {
