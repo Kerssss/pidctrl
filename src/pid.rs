@@ -18,7 +18,7 @@ pub struct Pid {
     kp: f32,
     ki: f32,
     kd: f32,
-    ksat: f32,
+    kaw: f32,
     //Controller limits
     up_lim: f32,
     lw_lim: f32,
@@ -40,16 +40,22 @@ pub struct Pid {
     //Controller status
 }
 
+pub enum AntiWindUpStrategy {
+    Clamping,
+    BackCalculation,
+    Bleeding,
+}
+
 /* 
  * Public implementations
  */
 impl Pid {
-    pub fn new(kp: f32, ki: f32, kd: f32, ksat: f32) -> Self {
+    pub fn new(kp: f32, ki: f32, kd: f32, kaw: f32) -> Self {
         Self { 
             kp, 
             ki, 
             kd, 
-            ksat, 
+            kaw, 
             up_lim: 0.0f32, 
             lw_lim: 0.0f32, 
             t_s: 0.0f32, 
@@ -68,11 +74,11 @@ impl Pid {
         }
     }
 
-    pub fn set_pid_constants(&mut self, kp: f32, ki: f32, kd: f32, ksat: f32) {
+    pub fn set_pid_constants(&mut self, kp: f32, ki: f32, kd: f32, kaw: f32) {
         self.kp = kp;
         self.ki = ki;
         self.kd = kd;
-        self.ksat = ksat;
+        self.kaw = kaw;
     }
 
     pub fn set_pid_config(&mut self, up_lim: f32, lw_lim: f32, t_s: f32) {
@@ -82,48 +88,78 @@ impl Pid {
 
     pub fn pid_step_wo_aw(&mut self, setp: f32, meas: f32) -> f32 {
         //Controller error:
-        let error: f32 = setp - meas;
+        self.error = setp - meas;
 
         //Controller proportional term:
-        let pid_prop_term: f32 = error * self.kp;
+        self.prop_term_output = self.error * self.kp;
 
         //Controller integral term:
-        self.prev_int_term_output += self.ki * error * self.t_s;
-        let pid_int_term: f32 = self.prev_int_term_output;
+        self.int_term_output = self.ki * self.error * self.t_s;
+        self.prev_int_term_output += self.int_term_output;
 
         //Controller derivative term:
-        let pid_der_term: f32 = ((error - self.prev_error) / self.t_s) * self.kd; 
+        self.der_term_output = ((self.error - self.prev_error) / self.t_s) * self.kd;
 
         //Previous values update:
-        self.prev_error = error;
-        self.prev_prop_term_output = pid_prop_term;
-        self.prev_der_term_output = pid_der_term;
+        self.prev_error = self.error;
+        self.prev_prop_term_output = self.prop_term_output;
+        self.prev_der_term_output = self.der_term_output;
 
         //Error summation:
-        self.error_summ += error;
+        self.error_summ += self.error;
 
         //Controller output:
-        self.output = pid_prop_term + pid_int_term + pid_der_term;
+        self.output = self.prop_term_output + self.prev_int_term_output + self.der_term_output;
         self.output_sat = utils::limit(self.output, self.lw_lim, self.up_lim);
 
         //Controller output:
         self.output_sat
     }
 
-    pub fn pid_step_w_aw_clamp() {
-        todo!();
-    }
+    pub fn pid_step_w_aw(&mut self, setp: f32, meas: f32, aw_strategy: AntiWindUpStrategy) -> f32 {
+        //Controller error:
+        self.error = setp - meas;
 
-    pub fn pid_step_w_aw_backcalc() {
-        todo!();
-    }
+        //Controller proportional term:
+        self.prop_term_output = self.error * self.kp;
 
-    pub fn pid_step_w_aw_condint() {
-        todo!();
-    }
+        //Controller integral term:
+        self.int_term_output = self.ki * self.error * self.t_s;
+        self.prev_int_term_output += self.int_term_output;
 
-    pub fn pid_step_w_aw_tracking() {
-        todo!();
+        //Controller derivative term:
+        self.der_term_output = ((self.error - self.prev_error) / self.t_s) * self.kd;
+
+        //Previous values update:
+        self.prev_error = self.error;
+        self.prev_prop_term_output = self.prop_term_output;
+        self.prev_der_term_output = self.der_term_output;
+
+        //Error summation:
+        self.error_summ += self.error;
+
+        //Controller output:
+        self.output = self.prop_term_output + self.prev_int_term_output + self.der_term_output;
+        self.output_sat = utils::limit(self.output, self.lw_lim, self.up_lim);
+
+        //Check if the controller is saturated:
+        if self.output == self.output_sat && self.error > 0.0 {
+
+            match aw_strategy {
+                AntiWindUpStrategy::BackCalculation => {
+                    self.prev_int_term_output += (self.output_sat - self.output) * self.kaw;
+                },
+                AntiWindUpStrategy::Clamping => {
+                    self.prev_int_term_output -= self.int_term_output;
+                }
+                AntiWindUpStrategy::Bleeding => {
+                    self.prev_int_term_output -= self.kaw * self.int_term_output;
+                },
+            };        
+        }
+
+        self.output
+
     }
 
     pub fn print_pid_performance(&self) {
@@ -145,11 +181,11 @@ impl Pid {
     }
 
     pub fn print_pid_config(&self) {
-        println!("Kp={}, Ki={}, Kd={}, Ksat={}",
+        println!("Kp={}, Ki={}, Kd={}, kaw={}",
         self.kp,
         self.ki,
         self.kd,
-        self.ksat);
+        self.kaw);
 
         println!("Lower limit: {}, upper limit: {}. Sample time: {}s",
         self.lw_lim,
